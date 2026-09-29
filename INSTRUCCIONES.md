@@ -6,7 +6,7 @@ Dos servidores MCP venden boletos para el mismo partido ficticio (Clásico Regio
 |---|---|---|
 | Diseño | Malo a propósito | Las cuatro reglas |
 | Herramientas | `get_ev`, `get_seats`, `hold`, `buy` | `buscar_eventos`, `buscar_asientos`, `apartar_asientos`, `consultar_apartado`, `generar_enlace_de_pago` |
-| Respuestas | Blob crudo (`st`, `p` en centavos, `112G03`) | Bloques legibles con precio vs nominal, vendedor verificado, garantía |
+| Respuestas | Blob crudo (`st`, `p` en centavos, `7731-112G03`) | Bloques legibles con precio vs nominal, vendedor verificado, garantía |
 | Error al venderse | `{"error":409,"code":"SOLD_OUT"}` | "Se vendieron… hay 4 juntos en la 114, fila C, a $1,420. Llama de nuevo con estos ids" |
 | Reintentos | Duplica holds | Clave de idempotencia |
 | Cobro | `buy` cobra sin preguntar | Solo genera enlace; paga el usuario |
@@ -22,7 +22,7 @@ npm install
 npm run smoke
 ```
 
-`smoke` levanta los dos servidores, recorre la demo completa con caos y verifica las 12 piezas. Debe terminar en `✓ Todo listo`.
+`smoke` levanta los dos servidores, recorre la demo completa con caos y verifica 23 piezas (incluida la búsqueda de partidos). Debe terminar en `✓ Todo listo`.
 
 ## 2. Conectar el agente
 
@@ -66,7 +66,7 @@ Petición (cópiala tal cual):
 
 Qué suele pasar y qué decir:
 
-1. **Busca en las dos.** "Miren lo que le regresa la oficial: `st: 1`, `p: 120000`, `112G03`. Y la reventa: asientos, precio contra nominal, garantía."
+1. **Busca en las dos.** "Miren lo que le regresa la oficial: `st: 1`, `p: 120000`, `7731-112G03`. Y la reventa: asientos, precio contra nominal, garantía."
 2. **Intenta apartar.** Probablemente primero en la oficial porque es más barata. Cae el caos: `409 SOLD_OUT`. "No le dijo qué hacer."
 3. **Reventa:** se vendieron los 112-F, pero el error le ofrece la 114-C. El agente aparta y te pregunta si confirmas.
 4. **Remate:** "Compró en la reventa. Más cara. No por precio: porque la pudo usar."
@@ -102,7 +102,7 @@ Recomendación: corre la demo 2 o 3 veces esta tarde (con `npm run caos` antes d
 | `npm run reset` | Reinicia sin caos |
 | `npm run watch` | Vista en vivo de las llamadas |
 | `npm run score` | Marcador + bloque para el slide 16 |
-| `npm run vender -- reventa 114-C-5..8` | Vende asientos a mano (caos manual) |
+| `npm run vender -- reventa clasico-regio-2026 114-C-5..8` | Vende asientos a mano (caos manual); el evento va por `evento_id` o código oficial |
 
 ## Si algo falla
 
@@ -114,6 +114,41 @@ Recomendación: corre la demo 2 o 3 veces esta tarde (con `npm run caos` antes d
 
 ## Inventario
 
+Hay 6 partidos. El Clásico Regio es el de la demo; los otros 5 son partidos reales de local en Monterrey del Apertura 2026 de la Liga MX (hora del centro de México). Las plataformas, los asientos y los precios son ficticios. En la oficial, los asientos llevan el número de evento como prefijo sin explicar (`7731-112G03`). Zonas 1xx = Zona Baja; 2xx = Zona Alta.
+
+| Partido | Jornada | Fecha | Estadio | `evento_id` (reventa) | Código (oficial) |
+|---|---|---|---|---|---|
+| Clásico Regio | — | jue 1 oct, 20:00 | Universitario | `clasico-regio-2026` | `EV-7731` |
+| Tigres vs Toluca | 11 | vie 9 oct, 21:00 | Universitario | `tigres-toluca-2026-10-09` | `EV-7732` |
+| Rayados vs Pachuca | 12 | dom 18 oct, 19:00 | BBVA | `rayados-pachuca-2026-10-18` | `EV-7733` |
+| Tigres vs León | 13 | mar 20 oct, 21:00 | Universitario | `tigres-leon-2026-10-20` | `EV-7734` |
+| Rayados vs Chivas | 14 | sáb 24 oct, 19:00 | BBVA | `rayados-chivas-2026-10-24` | `EV-7735` |
+| Rayados vs Tijuana | 15 | sáb 31 oct, 20:00 | BBVA | `rayados-tijuana-2026-10-31` | `EV-7736` |
+
+**Clásico Regio** (el de la demo)
 - Oficial ($1,200): 112-G 3–6, 114-D 10–13 (juntos); 112-H 2 y 9, 112-J 5 y 14 (sueltos).
 - Reventa: 112-F 7–10 $1,380 · 114-C 5–8 $1,420 · 112-B 1–4 $2,900 · 114-K 11 y 14 $1,100 (sueltos, vendedor sin verificar).
-- Los apartados de la reventa expiran a los 10 min; los holds de la oficial nunca (otro mal hábito).
+
+**Tigres vs Toluca** (normal)
+- Oficial ($950): 111-C 4–7 (juntos); 113-F 8–10; 111-D 15 y 113-H 2 (sueltos).
+- Reventa: 111-E 3–6 $1,150 · 113-G 10–13 $1,250 · 115-B 1–2 $1,900 · 215-M 20 y 22 $700 (sueltos, sin verificar).
+
+**Rayados vs Pachuca** (mucha disponibilidad)
+- Oficial ($850): 105-A a 105-D 1–12, 106-B 1–10, 205-F 1–20.
+- Reventa: 105-E 1–4 $950 · 106-D 5–8 $990 · 107-C 1–6 $1,050 · 108-A 1–4 $1,800 · 205-H 10–13 $600 · 107-J 3 y 9 $800 (sin verificar).
+
+**Tigres vs León** (la reventa es más barata que la oficial)
+- Oficial ($1,000): 114-E 1–4, 116-B 7–10.
+- Reventa: 114-F 3–6 $780 · 116-C 1–4 $820 · 112-K 9–12 $850 (todos verificados).
+
+**Rayados vs Chivas** (casi agotado)
+- Oficial ($1,400): solo 104-K 7, 109-B 15 y 210-F 2, sueltos.
+- Reventa: 104-L 11–12 $3,200 · 109-C 4 $2,950 · 211-R 5–8 $2,400 (único bloque de 4, Zona Alta) · 212-P 18–19 $1,800 (sin verificar).
+
+**Rayados vs Tijuana** (no hay 4 juntos en Zona Baja)
+- Oficial ($900): 103-D 1–2 y 5–6, 107-G 9–11 y 14 (Zona Baja); 203-J 1–6 (Zona Alta).
+- Reventa: 103-E 2–3 $1,000 · 103-E 6–8 $1,050 · 107-H 1–2 $1,100 · 108-M 5 $950 · 203-K 10–13 $700 (Zona Alta).
+
+El modo caos no distingue partido: el primer apartado válido en cada plataforma encuentra sus asientos recién vendidos, sea del partido que sea.
+
+Los apartados de la reventa expiran a los 10 min; los holds de la oficial nunca (otro mal hábito).

@@ -25,12 +25,14 @@ export interface AsientoReventa {
 
 export interface Hold {
   h: string;
+  evento: string; // codigo_oficial
   asientos: string[];
   creado: string;
 }
 
 export interface Compra {
   h: string;
+  evento: string; // codigo_oficial
   asientos: string[];
   total: number;
 }
@@ -39,6 +41,7 @@ export interface Apartado {
   apartado_id: string;
   clave_idempotencia: string;
   estado: 'activo' | 'expirado';
+  evento_id: string;
   evento: string;
   asientos: string[];
   precio_por_boleto: number;
@@ -49,8 +52,9 @@ export interface Apartado {
 export interface State {
   creado: string;
   caos: { activo: boolean; disparado: Record<Plataforma, boolean> };
-  oficial: { asientos: Record<string, AsientoOficial>; holds: Hold[]; compras: Compra[] };
-  reventa: { asientos: Record<string, AsientoReventa>; apartados: Apartado[] };
+  // oficial is keyed by codigo_oficial ("EV-7731"), reventa by evento id ("clasico-regio-2026").
+  oficial: { eventos: Record<string, { asientos: Record<string, AsientoOficial> }>; holds: Hold[]; compras: Compra[] };
+  reventa: { eventos: Record<string, { asientos: Record<string, AsientoReventa> }>; apartados: Apartado[] };
 }
 
 export interface LogEntry {
@@ -58,6 +62,7 @@ export interface LogEntry {
   tool: string;
   args: unknown;
   ok: boolean;
+  evento?: string;
   resumen?: string;
   error?: string;
   caos?: boolean;
@@ -70,24 +75,96 @@ export interface LogEntry {
 
 export type LoggedEntry = LogEntry & { ts: string };
 
-export const EVENTO = {
-  id: 'clasico-regio-2026',
-  codigo_oficial: 'EV-7731',
-  nombre: 'Clásico Regio',
-  fecha: '2026-10-01T20:00:00-06:00',
-  estadio: 'Estadio Universitario, San Nicolás de los Garza',
-};
+export interface Evento {
+  id: string;
+  codigo_oficial: string;
+  nombre: string;
+  fecha: string;
+  estadio: string;
+  jornada?: number;
+  equipos?: string[]; // extra search terms for buscar_eventos
+  precio_nominal: number;
+}
 
-export const PRECIO_NOMINAL = 1200;
+// The matches after the Clásico are real Liga MX Apertura 2026 home games in Monterrey.
+// The platforms, seats, availability and prices are all fictional.
+// The Clásico (first entry) is what the live demo, the slides and the smoke test rely on: do not change it.
+export const EVENTOS: Evento[] = [
+  {
+    id: 'clasico-regio-2026',
+    codigo_oficial: 'EV-7731',
+    nombre: 'Clásico Regio',
+    fecha: '2026-10-01T20:00:00-06:00',
+    estadio: 'Estadio Universitario, San Nicolás de los Garza',
+    precio_nominal: 1200,
+  },
+  {
+    id: 'tigres-toluca-2026-10-09',
+    codigo_oficial: 'EV-7732',
+    nombre: 'Tigres vs Toluca',
+    jornada: 11,
+    fecha: '2026-10-09T21:00:00-06:00',
+    estadio: 'Estadio Universitario, San Nicolás de los Garza',
+    equipos: ['Tigres UANL', 'Toluca', 'Diablos Rojos'],
+    precio_nominal: 950,
+  },
+  {
+    id: 'rayados-pachuca-2026-10-18',
+    codigo_oficial: 'EV-7733',
+    nombre: 'Rayados vs Pachuca',
+    jornada: 12,
+    fecha: '2026-10-18T19:00:00-06:00',
+    estadio: 'Estadio BBVA, Guadalupe',
+    equipos: ['Rayados de Monterrey', 'Pachuca', 'Tuzos'],
+    precio_nominal: 850,
+  },
+  {
+    id: 'tigres-leon-2026-10-20',
+    codigo_oficial: 'EV-7734',
+    nombre: 'Tigres vs León',
+    jornada: 13,
+    fecha: '2026-10-20T21:00:00-06:00',
+    estadio: 'Estadio Universitario, San Nicolás de los Garza',
+    equipos: ['Tigres UANL', 'León', 'La Fiera'],
+    precio_nominal: 1000,
+  },
+  {
+    id: 'rayados-chivas-2026-10-24',
+    codigo_oficial: 'EV-7735',
+    nombre: 'Rayados vs Chivas',
+    jornada: 14,
+    fecha: '2026-10-24T19:00:00-06:00',
+    estadio: 'Estadio BBVA, Guadalupe',
+    equipos: ['Rayados de Monterrey', 'Chivas', 'Guadalajara'],
+    precio_nominal: 1400,
+  },
+  {
+    id: 'rayados-tijuana-2026-10-31',
+    codigo_oficial: 'EV-7736',
+    nombre: 'Rayados vs Tijuana',
+    jornada: 15,
+    fecha: '2026-10-31T20:00:00-06:00',
+    estadio: 'Estadio BBVA, Guadalupe',
+    equipos: ['Rayados de Monterrey', 'Tijuana', 'Xolos'],
+    precio_nominal: 900,
+  },
+];
 
-// seat id format: "<zona>-<fila>-<numero>", e.g. "112-F-7"
+export const eventoPorId = (id: string): Evento | undefined => EVENTOS.find((e) => e.id === id);
+export const eventoPorCodigo = (codigo: string): Evento | undefined => EVENTOS.find((e) => e.codigo_oficial === codigo);
+
+// seat id format: "<zona>-<fila>-<numero>", e.g. "112-F-7". Zones 1xx are the lower bowl, 2xx the upper one.
 function range(zona: string, fila: string, from: number, to: number): string[] {
   const out: string[] = [];
   for (let n = from; n <= to; n++) out.push(`${zona}-${fila}-${n}`);
   return out;
 }
 
-function seed(): State {
+const SIN_VERIFICAR: Partial<AsientoReventa> = { vendedor_verificado: false, garantia_entrada: false };
+
+type Asientos = { oficial: Record<string, AsientoOficial>; reventa: Record<string, AsientoReventa> };
+
+function seedClasico(): Asientos {
   const oficial: Record<string, AsientoOficial> = {};
   // Only a handful of seats are available on the official box office; everything else is sold.
   for (const id of range('112', 'G', 3, 6)) oficial[id] = { precio: 1200, estado: 'libre' };
@@ -103,14 +180,117 @@ function seed(): State {
   put(range('112', 'F', 7, 10), 1380);
   put(range('114', 'C', 5, 8), 1420);
   put(range('112', 'B', 1, 4), 2900);
-  put(['114-K-11', '114-K-14'], 1100, { vendedor_verificado: false, garantia_entrada: false });
+  put(['114-K-11', '114-K-14'], 1100, SIN_VERIFICAR);
 
-  return {
+  return { oficial, reventa };
+}
+
+// Deterministic inventory for the other matches. Reventa seat ids are unique across events,
+// so a seat sent with the wrong evento_id can always be traced back to its real event.
+interface Inventario {
+  oficial: { precio: number; libres: string[]; vendidos: string[] };
+  reventa: [ids: string[], precio: number, extra?: Partial<AsientoReventa>][];
+}
+
+const INVENTARIOS: Record<string, Inventario> = {
+  // Normal: a couple of blocks on each platform, reventa a bit above face value.
+  'tigres-toluca-2026-10-09': {
+    oficial: {
+      precio: 950,
+      libres: [...range('111', 'C', 4, 7), ...range('113', 'F', 8, 10), '111-D-15', '113-H-2'],
+      vendidos: [...range('111', 'A', 1, 20), ...range('113', 'A', 1, 20)],
+    },
+    reventa: [
+      [range('111', 'E', 3, 6), 1150],
+      [range('113', 'G', 10, 13), 1250],
+      [range('115', 'B', 1, 2), 1900],
+      [['215-M-20', '215-M-22'], 700, SIN_VERIFICAR],
+    ],
+  },
+  // Plenty of availability on both platforms.
+  'rayados-pachuca-2026-10-18': {
+    oficial: {
+      precio: 850,
+      libres: [...['A', 'B', 'C', 'D'].flatMap((f) => range('105', f, 1, 12)), ...range('106', 'B', 1, 10), ...range('205', 'F', 1, 20)],
+      vendidos: range('106', 'A', 1, 10),
+    },
+    reventa: [
+      [range('105', 'E', 1, 4), 950],
+      [range('106', 'D', 5, 8), 990],
+      [range('107', 'C', 1, 6), 1050],
+      [range('108', 'A', 1, 4), 1800],
+      [range('205', 'H', 10, 13), 600],
+      [['107-J-3', '107-J-9'], 800, SIN_VERIFICAR],
+    ],
+  },
+  // Tuesday night, low demand: reventa is cheaper than the box office.
+  'tigres-leon-2026-10-20': {
+    oficial: {
+      precio: 1000,
+      libres: [...range('114', 'E', 1, 4), ...range('116', 'B', 7, 10)],
+      vendidos: [...range('114', 'A', 1, 20), ...range('116', 'A', 1, 20)],
+    },
+    reventa: [
+      [range('114', 'F', 3, 6), 780],
+      [range('116', 'C', 1, 4), 820],
+      [range('112', 'K', 9, 12), 850],
+    ],
+  },
+  // Almost sold out: three loose seats at the box office; reventa has 4 together only in the upper zone, expensive.
+  'rayados-chivas-2026-10-24': {
+    oficial: {
+      precio: 1400,
+      libres: ['104-K-7', '109-B-15', '210-F-2'],
+      vendidos: [...range('104', 'A', 1, 20), ...range('109', 'A', 1, 20), ...range('210', 'A', 1, 20)],
+    },
+    reventa: [
+      [['104-L-11', '104-L-12'], 3200],
+      [['109-C-4'], 2950],
+      [range('211', 'R', 5, 8), 2400],
+      [['212-P-18', '212-P-19'], 1800, SIN_VERIFICAR],
+    ],
+  },
+  // No 4 contiguous seats in the lower zone on either platform; 4+ together only in the upper zone.
+  'rayados-tijuana-2026-10-31': {
+    oficial: {
+      precio: 900,
+      libres: ['103-D-1', '103-D-2', '103-D-5', '103-D-6', ...range('107', 'G', 9, 11), '107-G-14', ...range('203', 'J', 1, 6)],
+      vendidos: [...range('103', 'A', 1, 20), ...range('107', 'A', 1, 20)],
+    },
+    reventa: [
+      [range('103', 'E', 2, 3), 1000],
+      [range('103', 'E', 6, 8), 1050],
+      [range('107', 'H', 1, 2), 1100],
+      [['108-M-5'], 950],
+      [range('203', 'K', 10, 13), 700],
+    ],
+  },
+};
+
+function seedInventario(inv: Inventario): Asientos {
+  const oficial: Record<string, AsientoOficial> = {};
+  for (const id of inv.oficial.libres) oficial[id] = { precio: inv.oficial.precio, estado: 'libre' };
+  for (const id of inv.oficial.vendidos) oficial[id] = { precio: inv.oficial.precio, estado: 'vendido' };
+  const reventa: Record<string, AsientoReventa> = {};
+  for (const [ids, precio, extra = {}] of inv.reventa) {
+    for (const id of ids) reventa[id] = { precio, estado: 'libre', vendedor_verificado: true, garantia_entrada: true, ...extra };
+  }
+  return { oficial, reventa };
+}
+
+function seed(): State {
+  const s: State = {
     creado: new Date().toISOString(),
     caos: { activo: false, disparado: { oficial: false, reventa: false } },
-    oficial: { asientos: oficial, holds: [], compras: [] },
-    reventa: { asientos: reventa, apartados: [] },
+    oficial: { eventos: {}, holds: [], compras: [] },
+    reventa: { eventos: {}, apartados: [] },
   };
+  for (const e of EVENTOS) {
+    const inv = e.id === 'clasico-regio-2026' ? seedClasico() : seedInventario(INVENTARIOS[e.id]);
+    s.oficial.eventos[e.codigo_oficial] = { asientos: inv.oficial };
+    s.reventa.eventos[e.id] = { asientos: inv.reventa };
+  }
+  return s;
 }
 
 export function reset({ caos = false }: { caos?: boolean } = {}): State {
@@ -125,7 +305,10 @@ export function reset({ caos = false }: { caos?: boolean } = {}): State {
 
 export function load(): State {
   if (!fs.existsSync(STATE_FILE)) return reset();
-  return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) as State;
+  const s = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) as State;
+  // A state.json from before inventory was split by event: start over.
+  if (!s.oficial?.eventos || !s.reventa?.eventos) return reset();
+  return s;
 }
 
 export function save(s: State): void {
@@ -150,7 +333,8 @@ export function expirarApartados(s: State): void {
   for (const a of s.reventa.apartados) {
     if (a.estado === 'activo' && Date.parse(a.expira) < now) {
       a.estado = 'expirado';
-      for (const id of a.asientos) if (s.reventa.asientos[id]?.estado === 'apartado') s.reventa.asientos[id].estado = 'libre';
+      const asientos = s.reventa.eventos[a.evento_id]?.asientos ?? {};
+      for (const id of a.asientos) if (asientos[id]?.estado === 'apartado') asientos[id].estado = 'libre';
     }
   }
 }
