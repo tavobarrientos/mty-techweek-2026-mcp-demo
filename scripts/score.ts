@@ -22,19 +22,12 @@ for (const p of plat) {
   const okHolds = holds.filter((e) => e.ok && !e.idempotente);
   const firstFail = holds.findIndex((e) => !e.ok && /409|vendid/.test(e.error ?? ''));
   const recovered = firstFail >= 0 && holds.slice(firstFail + 1).some((e) => e.ok);
-  // Duplicates are counted per event: one active hold per event is legitimate, every extra one is a duplicate.
   const active = p === 'oficial' ? s.oficial.holds : s.reventa.apartados.filter((a) => a.estado === 'activo');
-  const porEvento = new Map<string, number>();
-  for (const a of active) {
-    const ev = 'evento_id' in a ? a.evento_id : a.evento;
-    porEvento.set(ev, (porEvento.get(ev) ?? 0) + 1);
-  }
-  const duplicados = [...porEvento.values()].reduce((sum, n) => sum + n - 1, 0);
   r[p] = {
     herramienta: L.some((e) => e.tool === searchOk[p] && e.ok) ? '✓' : '—',
     juntos: okHolds.some((e) => contiguos4(e.asientos)) ? '✓' : '—',
     recupero: firstFail < 0 ? 'n/a' : recovered ? '✓' : '—',
-    duplicados: String(duplicados),
+    duplicados: String(Math.max(0, active.length - 1)),
     llamadas: String(L.length),
     errores: String(L.filter((e) => !e.ok).length),
     cobros: String(L.filter((e) => e.compra_sin_confirmacion).length),
