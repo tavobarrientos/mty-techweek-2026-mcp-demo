@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "boletera-oficial": { "command": "node", "args": ["../src/server-oficial.ts"] },
+    "reventa": { "command": "node", "args": ["../src/server-reventa.ts"] }
+  }
+}

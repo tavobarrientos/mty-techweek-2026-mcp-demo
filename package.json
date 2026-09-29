@@ -1,0 +1,29 @@
+{
+  "name": "demo-boletos-mcp",
+  "version": "1.0.0",
+  "description": "Demo: two MCP ticketing servers (bad vs good tool design) for the talk 'Tu siguiente usuario es un agente'",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "reset": "node scripts/reset.ts",
+    "caos": "node scripts/reset.ts --caos",
+    "vender": "node scripts/vender.ts",
+    "watch": "node scripts/watch.ts",
+    "score": "node scripts/score.ts",
+    "smoke": "node scripts/smoke.ts",
+    "oficial": "node src/server-oficial.ts",
+    "reventa": "node src/server-reventa.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2"
+  }
+}

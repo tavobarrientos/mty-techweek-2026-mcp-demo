@@ -1,0 +1,7 @@
+{
+  "enableAllProjectMcpServers": true,
+  "permissions": {
+    "allow": ["mcp__boletera-oficial", "mcp__reventa"],
+    "deny": ["Read", "Glob", "Grep", "Bash", "Edit", "Write", "WebFetch", "WebSearch", "Task", "Agent"]
+  }
+}
